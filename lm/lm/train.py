@@ -20,7 +20,7 @@ def train(model, tokenizer, name, batch_size, learning_rate, warmup_steps, epoch
         num_train_epochs=epochs,
         weight_decay=0.01,
         report_to="clearml",
-        save_strategy="save",
+        save_strategy="steps",
         save_steps=500,
         save_total_limit=5,
         logging_steps=20,
@@ -57,7 +57,7 @@ if __name__ == "__main__":
 
     embeddings, nodes = None, None
 
-    os.environ["CLEARML_PROJECT"] = "answer-detection"
+    os.environ["CLEARML_PROJECT"] = "masters-thesis"
     os.environ["CLEARML_TASK"] = args.name
 
     model, tokenizer = instantiate_model(args.checkpoint, 128, 0.8)
