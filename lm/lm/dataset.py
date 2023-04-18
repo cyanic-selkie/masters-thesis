@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from typing import Union, Optional
 from dataclasses import dataclass
+import pyarrow.parquet as pq
 
 @dataclass
 class DataCollatorForNEL(DataCollatorMixin):
@@ -117,16 +118,19 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings, no
 
                 if token_start_index != token_end_index:
                     spans.append((token_start_index, token_end_index + 1))
-                    targets.append(torch.ones((128,)))
+                    targets.append(embeddings[nodes[qid]])
         
-        spans.sort()
+        spans, targets = zip(*sorted(zip(spans, targets), key=lambda x: x[0]))
 
-        tokenized_examples["spans"].append(spans)
-        tokenized_examples["targets"].append(targets)
+        tokenized_examples["spans"].append(list(spans))
+        tokenized_examples["targets"].append(list(targets))
                     
     return tokenized_examples
 
-def get_dataset(tokenizer, embeddings, nodes):
+def get_dataset(tokenizer, embedding_size, embeddings, nodes):
+    nodes = {qid: i for i, qid in enumerate(pq.read_table(nodes, columns=["qid"])["qid"].to_pylist())}
+    embeddings = np.memmap(embeddings, np.float32, "r", shape=(len(nodes), embedding_size))
+
     max_length = tokenizer.model_max_length
     doc_stride = max_length // 2
 
