@@ -30,6 +30,7 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
         logging_steps=20,
         warmup_steps=warmup_steps,
         gradient_accumulation_steps=gradient_accumulation_steps
+        max_steps=None,
     )
 
     trainer = Trainer(
