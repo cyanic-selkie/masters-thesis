@@ -120,6 +120,9 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings, no
                     spans.append((token_start_index, token_end_index + 1))
                     targets.append(embeddings[nodes[qid]])
         
+        if len(spans) == 0:
+            continue
+
         spans, targets = zip(*sorted(zip(spans, targets), key=lambda x: x[0]))
 
         tokenized_examples["spans"].append(list(spans))
