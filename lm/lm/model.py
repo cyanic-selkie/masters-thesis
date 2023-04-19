@@ -81,7 +81,7 @@ class NELModel(BertPreTrainedModel):
         bos = sequence_output[:, spans[:, 0].squeeze(), :]
         eos =  sequence_output[:, spans[:, 1].squeeze(), :]
         # Combine boundary token embeddings into a single span embedding.
-        embeddings = self.mapper(torch.cat((bos, eos), dim=3))
+        embeddings = self.mapper(torch.cat((bos, eos), dim=-1))
         # Calculate scores for classification.
         logits = self.classifier(embeddings).squeeze()
 
