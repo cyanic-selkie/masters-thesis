@@ -48,12 +48,14 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--name", type=str, required=True)
     parser.add_argument("--checkpoint", type=str, required=True)
     parser.add_argument("--alpha", type=float, required=True)
     parser.add_argument("--embedding-size", type=int, required=True)
     parser.add_argument("--learning-rate", type=float, required=True)
     parser.add_argument("--warmup-steps", type=float, required=True)
-    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--batch-size", type=int, required=True)
+    parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--embeddings", type=str, required=True)
     parser.add_argument("--nodes", type=str, required=True)
     parser.add_argument("--gradient-accumulation-steps", type=int, required=True)
