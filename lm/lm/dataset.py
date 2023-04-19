@@ -89,8 +89,6 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings, no
         for span in examples["anchors"][sample_index]:
             span_start, span_end, qid = span["start"], span["end"], span["qid"]
 
-            if qid is None or qid not in nodes:
-                continue
             # Start token index of the current span in the text.
             token_start_index = 0
             
@@ -116,11 +114,12 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings, no
                 except Exception:
                     continue
 
-                if token_start_index != token_end_index:
-                    spans.append((token_start_index, token_end_index + 1))
-                    targets.append(embeddings[nodes[qid]])
+                # if token_start_index != token_end_index:
+                spans.append((token_start_index, token_end_index + 1))
+                targets.append(embeddings[nodes[qid]])
         
-        spans, targets = zip(*sorted(zip(spans, targets), key=lambda x: x[0]))
+        if len(spans) > 0:
+            spans, targets = zip(*sorted(zip(spans, targets), key=lambda x: x[0]))
 
         tokenized_examples["spans"].append(list(spans))
         tokenized_examples["targets"].append(list(targets))
