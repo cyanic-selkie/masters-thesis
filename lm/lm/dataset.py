@@ -120,15 +120,23 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings, no
                     spans.append((token_start_index, token_end_index + 1))
                     targets.append(embeddings[nodes[qid]])
         
-        if len(spans) == 0:
-            continue
-
         spans, targets = zip(*sorted(zip(spans, targets), key=lambda x: x[0]))
 
         tokenized_examples["spans"].append(list(spans))
         tokenized_examples["targets"].append(list(targets))
                     
     return tokenized_examples
+
+def has_spans(example, nodes):
+    if example["context"].strip() == "":
+        return False
+
+    result = False
+    for span in example["anchors"]:
+        if span["qid"] is not None and span["qid"] in nodes:
+            result = True
+
+    return result
 
 def get_dataset(tokenizer, embedding_size, embeddings, nodes):
     nodes = {qid: i for i, qid in enumerate(pq.read_table(nodes, columns=["qid"])["qid"].to_pylist())}
@@ -144,7 +152,7 @@ def get_dataset(tokenizer, embedding_size, embeddings, nodes):
     
     dataset = dataset.remove_columns(["uuid", "article_title", "article_pageid", "article_qid", "section_heading", "section_level"])
     dataset = dataset.rename_columns({"paragraph_text": "context", "paragraph_anchors": "anchors"})
-    dataset = dataset.filter(lambda x: len(x["anchors"]) > 0 and x["context"].strip() != "" and any(y["qid"] is not None for y in x["anchors"]))
+    dataset = dataset.filter(lambda x: has_spans(x, nodes))
     dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length, doc_stride, embeddings, nodes), batched=True, remove_columns=["context", "anchors"])
 
     dataset = dataset.shuffle(seed=42, buffer_size=1000)
