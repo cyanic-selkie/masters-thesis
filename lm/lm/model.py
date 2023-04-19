@@ -77,10 +77,11 @@ class NELModel(BertPreTrainedModel):
         # Select the beginning and ending tokens of all spans (note that span boundaries are symmetric).
         # bos = sequence_output[:, self.get_buffer("span_indices")[:, 0], :]
         # eos =  sequence_output[:, self.get_buffer("span_indices")[:, 1], :]
-        bos = sequence_output[:, spans[:, :, 0], :]
-        eos =  sequence_output[:, spans[:, :, 1], :]
+        spans = spans.squeeze()
+        bos = sequence_output[:, spans[:, 0].squeeze(), :]
+        eos =  sequence_output[:, spans[:, 1].squeeze(), :]
         # Combine boundary token embeddings into a single span embedding.
-        embeddings = self.mapper(torch.cat((bos, eos), dim=2))
+        embeddings = self.mapper(torch.cat((bos, eos), dim=3))
         # Calculate scores for classification.
         logits = self.classifier(embeddings).squeeze()
 
