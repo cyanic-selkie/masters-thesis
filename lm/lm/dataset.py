@@ -14,11 +14,11 @@ import pyarrow.parquet as pq
 class DataCollatorForNEL(DataCollatorMixin):
     tokenizer: PreTrainedTokenizerBase
     embedding_size: int
+    devices: int
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
-    devices: int = 1
     return_tensors: str = "pt"
 
     def torch_call(self, features):
