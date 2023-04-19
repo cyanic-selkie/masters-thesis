@@ -130,12 +130,11 @@ def has_spans(example, nodes):
     if example["context"].strip() == "":
         return False
 
-    result = False
     for span in example["anchors"]:
         if span["qid"] is not None and span["qid"] in nodes:
-            result = True
+            return True
 
-    return result
+    return False
 
 def get_dataset(tokenizer, embedding_size, embeddings, nodes):
     nodes = {qid: i for i, qid in enumerate(pq.read_table(nodes, columns=["qid"])["qid"].to_pylist())}
