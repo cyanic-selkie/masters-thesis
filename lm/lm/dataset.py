@@ -18,6 +18,7 @@ class DataCollatorForNEL(DataCollatorMixin):
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     label_pad_token_id: int = -100
+    devices: int = 1
     return_tensors: str = "pt"
 
     def torch_call(self, features):
@@ -50,7 +51,7 @@ class DataCollatorForNEL(DataCollatorMixin):
                 mask[idx] = 1
                 dense_targets[idx] = target
 
-        batch["spans"] = span_indices
+        batch["spans"] = np.repeat(span_indices[np.newaxis, :, :], self.devices, axis=0)
         batch["span_mask"] = span_mask
         batch["targets"] = batch_dense_targets
 

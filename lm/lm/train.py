@@ -12,8 +12,8 @@ from clearml import Task
 import os
 import pyarrow.parquet as pq
 
-def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, epochs, gradient_accumulation_steps, embedding_size, dataset):
-    data_collator = DataCollatorForNEL(tokenizer, embedding_size)
+def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, epochs, gradient_accumulation_steps, devices, embedding_size, dataset):
+    data_collator = DataCollatorForNEL(tokenizer, embedding_size, devices)
 
     args = TrainingArguments(
         output_dir=f"models/{name}",
@@ -57,6 +57,7 @@ if __name__ == "__main__":
     parser.add_argument("--warmup-steps", type=float, required=True)
     parser.add_argument("--batch-size", type=int, required=True)
     parser.add_argument("--epochs", type=int, required=True)
+    parser.add_argument("--devices", type=int, required=True)
     parser.add_argument("--embeddings", type=str, required=True)
     parser.add_argument("--nodes", type=str, required=True)
     parser.add_argument("--gradient-accumulation-steps", type=int, required=True)
@@ -71,4 +72,4 @@ if __name__ == "__main__":
 
     dataset = get_dataset(tokenizer, args.embedding_size, args.embeddings, args.nodes)
 
-    train(model, args.checkpoint, tokenizer, args.name, args.batch_size, args.learning_rate, args.warmup_steps, args.epochs, args.gradient_accumulation_steps, args.embedding_size, dataset)
+    train(model, args.checkpoint, tokenizer, args.name, args.batch_size, args.learning_rate, args.warmup_steps, args.epochs, args.gradient_accumulation_steps, args.devices, args.embedding_size, dataset)
