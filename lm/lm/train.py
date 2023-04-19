@@ -29,7 +29,7 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
         save_total_limit=2,
         logging_steps=20,
         warmup_steps=warmup_steps,
-        gradient_accumulation_steps=gradient_accumulation_steps
+        gradient_accumulation_steps=gradient_accumulation_steps,
         max_steps=34555183,
     )
 
