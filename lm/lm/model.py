@@ -23,15 +23,21 @@ class NELModel(BertPreTrainedModel):
         # self.register_buffer('span_indices', span_indices)
 
         self.bert = BertModel(config, add_pooling_layer=False)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
+        #classifier_dropout = (
+        #    config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        #)
+        #self.dropout = nn.Dropout(classifier_dropout)
 
-        self.mapper = nn.Sequential(
-            nn.Linear(config.hidden_size * 2, config.embedding_size),
+        #self.premapper = nn.Sequential(
+            #nn.GELU(),
+            #nn.LayerNorm(config.hidden_size),
+        #)
+
+        self.mapper_1 = nn.Linear(config.hidden_size * 2, config.embedding_size)
+
+        self.mapper_2 = nn.Sequential(
             nn.GELU(),
-            nn.LayerNorm(config.embedding_size, eps=1e-12),
+            nn.LayerNorm(config.embedding_size),
             nn.Linear(config.embedding_size, config.embedding_size),
         )
 
@@ -72,40 +78,45 @@ class NELModel(BertPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output)
+        #sequence_output = self.dropout(sequence_output)
 
         # Select the beginning and ending tokens of all spans (note that span boundaries are symmetric).
         # bos = sequence_output[:, self.get_buffer("span_indices")[:, 0], :]
         # eos =  sequence_output[:, self.get_buffer("span_indices")[:, 1], :]
         spans = spans.squeeze()
+        #bos = self.premapper(sequence_output[:, spans[:, 0].squeeze(), :])
+        #eos =  self.premapper(sequence_output[:, spans[:, 1].squeeze(), :])
         bos = sequence_output[:, spans[:, 0].squeeze(), :]
         eos =  sequence_output[:, spans[:, 1].squeeze(), :]
         # Combine boundary token embeddings into a single span embedding.
-        embeddings = self.mapper(torch.cat((bos, eos), dim=-1))
+        # Combine boundary token embeddings into a single span embedding.
+        embeddings = self.mapper_1(torch.cat((bos, eos), dim=-1))
+        embeddings = self.mapper_2(embeddings) + embeddings
         # Calculate scores for classification.
         logits = self.classifier(embeddings).squeeze()
 
         loss = None
         losses = []
         if targets is not None:
-            loss_fct = nn.MSELoss(reduction='none')
+            mask = span_mask.unsqueeze(-1).expand_as(embeddings)
 
-            mse_loss = loss_fct(embeddings, targets)
-
-            # mask
-            mask = span_mask.unsqueeze(-1).expand_as(mse_loss)
-            mse_loss = (mse_loss * mask.float()).sum() / mask.sum()
+            if mask.sum() == 0:
+                mse_loss = torch.tensor(0., requires_grad=True)
+            else:
+                loss_fct = nn.MSELoss(reduction='none')
+                mse_loss = loss_fct(embeddings, targets)
+                mse_loss = (mse_loss * mask.float()).sum() / mask.sum()
 
             losses.append(self.alpha * mse_loss)
 
         if labels is not None:
-            loss_fct = nn.BCEWithLogitsLoss(reduction='none')
-
-            bce_loss = loss_fct(logits, labels)
-
-            # mask
             mask = span_mask
-            bce_loss = (bce_loss * mask.float()).sum() / mask.sum()
+            if mask.sum() == 0:
+                mse_loss = torch.tensor(0., requires_grad=True)
+            else:
+                loss_fct = nn.BCEWithLogitsLoss(reduction='none')
+                bce_loss = loss_fct(logits, labels)
+                bce_loss = (bce_loss * mask.float()).sum() / mask.sum()
 
             losses.append((1 - self.alpha) * bce_loss)
 
