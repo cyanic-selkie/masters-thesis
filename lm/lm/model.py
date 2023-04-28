@@ -5,6 +5,7 @@ import torch
 from typing import Optional, Union, Tuple
 import torch.nn as nn
 from transformers.utils import ModelOutput
+import os
 
 class NELOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
@@ -16,22 +17,9 @@ class NELModel(BertPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.alpha = config.alpha
-
-        # span_indices = torch.linspace(0, config.max_position_embeddings - 1, config.max_position_embeddings, dtype=torch.int32)
-        # span_indices = torch.combinations(span_indices, 2, with_replacement=True)
-        # self.register_buffer('span_indices', span_indices)
+        self.classes_num = config.classes_num
 
         self.bert = BertModel(config, add_pooling_layer=False)
-        #classifier_dropout = (
-        #    config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        #)
-        #self.dropout = nn.Dropout(classifier_dropout)
-
-        #self.premapper = nn.Sequential(
-            #nn.GELU(),
-            #nn.LayerNorm(config.hidden_size),
-        #)
 
         self.mapper_1 = nn.Linear(config.hidden_size * 2, config.embedding_size)
 
@@ -41,7 +29,15 @@ class NELModel(BertPreTrainedModel):
             nn.Linear(config.embedding_size, config.embedding_size),
         )
 
-        self.classifier = nn.Linear(config.embedding_size, 1)
+        self.classifier = nn.Sequential(
+            nn.Linear(config.embedding_size, config.embedding_size * 2),
+            nn.GELU(),
+            nn.LayerNorm(config.embedding_size * 2),
+            nn.Linear(config.embedding_size * 2, config.embedding_size * 2),
+            nn.GELU(),
+            nn.LayerNorm(config.embedding_size * 2),
+            nn.Linear(config.embedding_size * 2, config.classes_num),
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -55,9 +51,10 @@ class NELModel(BertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        spans: Optional[torch.Tensor] = None,
+        span_indices: Optional[torch.Tensor] = None,
         span_mask: Optional[torch.Tensor] = None,
         targets: Optional[torch.Tensor] = None,
+        class_weights: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -78,17 +75,9 @@ class NELModel(BertPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        #sequence_output = self.dropout(sequence_output)
-
-        # Select the beginning and ending tokens of all spans (note that span boundaries are symmetric).
-        # bos = sequence_output[:, self.get_buffer("span_indices")[:, 0], :]
-        # eos =  sequence_output[:, self.get_buffer("span_indices")[:, 1], :]
-        spans = spans.squeeze()
-        #bos = self.premapper(sequence_output[:, spans[:, 0].squeeze(), :])
-        #eos =  self.premapper(sequence_output[:, spans[:, 1].squeeze(), :])
-        bos = sequence_output[:, spans[:, 0].squeeze(), :]
-        eos =  sequence_output[:, spans[:, 1].squeeze(), :]
-        # Combine boundary token embeddings into a single span embedding.
+        span_indices = span_indices.squeeze()
+        bos = sequence_output[:, span_indices[:, 0].squeeze(), :]
+        eos =  sequence_output[:, span_indices[:, 1].squeeze(), :]
         # Combine boundary token embeddings into a single span embedding.
         embeddings = self.mapper_1(torch.cat((bos, eos), dim=-1))
         embeddings = self.mapper_2(embeddings) + embeddings
@@ -107,18 +96,20 @@ class NELModel(BertPreTrainedModel):
                 mse_loss = loss_fct(embeddings, targets)
                 mse_loss = (mse_loss * mask.float()).sum() / mask.sum()
 
-            losses.append(self.alpha * mse_loss)
+            losses.append(mse_loss)
 
         if labels is not None:
-            mask = span_mask
-            if mask.sum() == 0:
-                mse_loss = torch.tensor(0., requires_grad=True)
-            else:
-                loss_fct = nn.BCEWithLogitsLoss(reduction='none')
-                bce_loss = loss_fct(logits, labels)
-                bce_loss = (bce_loss * mask.float()).sum() / mask.sum()
+            mask = span_mask.view(-1)
 
-            losses.append((1 - self.alpha) * bce_loss)
+            if mask.sum() == 0:
+                bce_loss = torch.tensor(0., requires_grad=True)
+            else:
+                class_weights = class_weights.squeeze()
+                loss_fct = nn.CrossEntropyLoss(reduction='none', weight=class_weights)
+                bce_loss = loss_fct(logits.view(-1, self.classes_num), labels.view(-1))
+                bce_loss = (bce_loss * mask.float()).sum() / (class_weights[labels.view(-1)] * mask).sum()
+
+            losses.append(bce_loss)
 
         loss = sum(losses) / len(losses)
 
@@ -132,15 +123,21 @@ class NELModel(BertPreTrainedModel):
             logits=logits,
         )
 
-def instantiate_model(checkpoint, embedding_size, alpha):
+def instantiate_model(checkpoint, embedding_size, classes_num):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint, model_max_length=512, do_lower_case=False)
-
     config = AutoConfig.from_pretrained(checkpoint, output_attentions=True, output_hidden_states=True)
     config = config.to_dict()
     config["embedding_size"] = embedding_size
-    config["alpha"] = alpha
+    config["classes_num"] = classes_num
+    config["id2label"] = {
+        0: "O",
+        1: "ENTITY"
+    }
+    config["label2id"] = {
+        "O": 0,
+        "ENTITY": 1
+    }
     config = BertConfig.from_dict(config)
-
-    model = NELModel.from_pretrained(checkpoint, config=config)
+    model = NELModel.from_pretrained(checkpoint, config=config, ignore_mismatched_sizes=True)
 
     return model, tokenizer
