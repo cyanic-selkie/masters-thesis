@@ -35,7 +35,7 @@ def compute_metrics(p, seqeval, id2label):
         "accuracy": results["overall_accuracy"],
     }
 
-def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, epochs, gradient_accumulation_steps, devices, embedding_size, classes_num, dataset):
+def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, epochs, gradient_accumulation_steps, devices, embedding_size, classes_num, dataset, continue_training):
     data_collator = DataCollatorForNELClassifier(tokenizer, weights, devices)
     seqeval = evaluate.load("seqeval")
 
@@ -51,7 +51,7 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
         save_strategy="steps",
         save_steps=500,
         save_total_limit=2,
-        logging_steps=1,
+        logging_steps=20,
         warmup_steps=warmup_steps,
         gradient_accumulation_steps=gradient_accumulation_steps,
         remove_unused_columns=False,
@@ -67,11 +67,10 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
         compute_metrics=lambda x: compute_metrics(x, seqeval, model.config.id2label)
     )
 
-    # if os.path.isdir(checkpoint):
-        # trainer.train(checkpoint)
-    # else:
-        # trainer.train()
-    trainer.train()
+    if continue_training:
+        trainer.train(checkpoint)
+    else:
+        trainer.train()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -85,6 +84,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, required=True)
     parser.add_argument("--devices", type=int, required=True)
     parser.add_argument("--gradient-accumulation-steps", type=int, required=True)
+    parser.add_argument("--continue-training", action="store_true")
     args = parser.parse_args()
 
     model, tokenizer = instantiate_model(args.checkpoint, args.embedding_size, args.classes_num)
@@ -111,11 +111,11 @@ if __name__ == "__main__":
             param.requires_grad = False
 
     weights = 1 / frequencies
-    data_collator = DataCollatorForNELClassifier(tokenizer, weights, args.devices)
+    # data_collator = DataCollatorForNELClassifier(tokenizer, weights, args.devices)
 
-    x = iter(dataset["train"])
-    dataset["train"] = [next(x) for _ in range(4)]
+    # x = iter(dataset["train"])
+    # dataset["train"] = [next(x) for _ in range(4)]
 
-    dataset["validation"] = dataset["train"]
+    # dataset["validation"] = dataset["train"]
 
-    train(model, args.checkpoint, tokenizer, args.name, args.batch_size, args.learning_rate, args.warmup_steps, args.epochs, args.gradient_accumulation_steps, args.devices, args.embedding_size, weights, dataset)
+    train(model, args.checkpoint, tokenizer, args.name, args.batch_size, args.learning_rate, args.warmup_steps, args.epochs, args.gradient_accumulation_steps, args.devices, args.embedding_size, weights, dataset, args.continue_training)

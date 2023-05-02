@@ -30,13 +30,10 @@ class NELModel(BertPreTrainedModel):
         )
 
         self.classifier = nn.Sequential(
-            nn.Linear(config.embedding_size, config.embedding_size * 2),
+            nn.Linear(config.embedding_size, config.embedding_size),
             nn.GELU(),
-            nn.LayerNorm(config.embedding_size * 2),
-            nn.Linear(config.embedding_size * 2, config.embedding_size * 2),
-            nn.GELU(),
-            nn.LayerNorm(config.embedding_size * 2),
-            nn.Linear(config.embedding_size * 2, config.classes_num),
+            nn.LayerNorm(config.embedding_size),
+            nn.Linear(config.embedding_size, config.classes_num),
         )
 
         # Initialize weights and apply final processing
@@ -82,7 +79,8 @@ class NELModel(BertPreTrainedModel):
         embeddings = self.mapper_1(torch.cat((bos, eos), dim=-1))
         embeddings = self.mapper_2(embeddings) + embeddings
         # Calculate scores for classification.
-        logits = self.classifier(embeddings).squeeze()
+        # logits = self.classifier(embeddings).squeeze()
+        logits = self.classifier(torch.cat((bos, eos), dim=-1))
 
         loss = None
         losses = []

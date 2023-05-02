@@ -96,8 +96,8 @@ class DataCollatorForNELClassifier(DataCollatorMixin):
         for input_features, span_mask in zip(batch_input_features, batch_span_mask):
             instance_sequence_length = input_features["input_ids"].shape[0]
 
-            for x in range(instance_sequence_length, sequence_length):
-                for y in range(x, sequence_length):
+            for x in range(0, sequence_length):
+                for y in range(max(x, instance_sequence_length), sequence_length):
                     idx = get_span_index(x, y, sequence_length)
                     span_mask[idx] = 0
 
@@ -181,7 +181,7 @@ def prepare_features_wikianc(examples, tokenizer, max_length, doc_stride, embedd
                     continue
 
                 # if token_start_index != token_end_index:
-                spans.append((token_start_index, token_end_index + 1))
+                spans.append((token_start_index, token_end_index))
                 targets.append(torch.tensor(embeddings[nodes[qid]]))
         
         if len(spans) > 0:
@@ -250,8 +250,7 @@ def prepare_features_conll(examples, tokenizer, max_length, doc_stride):
                 except Exception:
                     continue
 
-                # if token_start_index != token_end_index:
-                spans.append((token_start_index, token_end_index + 1))
+                spans.append((token_start_index, token_end_index))
                 labels.append(1)
         
         if len(spans) > 0:

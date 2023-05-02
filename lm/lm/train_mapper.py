@@ -11,7 +11,7 @@ import os
 import pyarrow.parquet as pq
 from math import ceil
 
-def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, gradient_accumulation_steps, devices, embedding_size, classes_num, dataset):
+def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, gradient_accumulation_steps, devices, embedding_size, classes_num, dataset, continue_training):
     data_collator = DataCollatorForNELMapper(tokenizer, embedding_size, devices)
 
     args = TrainingArguments(
@@ -42,7 +42,7 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
         tokenizer=tokenizer,
     )
 
-    if os.path.isdir(checkpoint):
+    if continue_training:
         trainer.train(checkpoint)
     else:
         trainer.train()
@@ -61,10 +61,11 @@ if __name__ == "__main__":
     parser.add_argument("--gradient-accumulation-steps", type=int, required=True)
     parser.add_argument("--embeddings", type=str, required=True)
     parser.add_argument("--nodes", type=str, required=True)
+    parser.add_argument("--continue-training", action="store_true")
     args = parser.parse_args()
 
     model, tokenizer = instantiate_model(args.checkpoint, args.embedding_size, args.classes_num)
 
     dataset = get_dataset_wikianc(tokenizer, args.embedding_size, args.embeddings, args.nodes)
 
-    train(model, args.checkpoint, tokenizer, args.name, args.batch_size, args.learning_rate, args.warmup_steps, args.gradient_accumulation_steps, args.devices, args.embedding_size, args.classes_num, dataset)
+    train(model, args.checkpoint, tokenizer, args.name, args.batch_size, args.learning_rate, args.warmup_steps, args.gradient_accumulation_steps, args.devices, args.embedding_size, args.classes_num, dataset, args.continue_training)
