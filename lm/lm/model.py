@@ -79,8 +79,8 @@ class NELModel(BertPreTrainedModel):
         embeddings = self.mapper_1(torch.cat((bos, eos), dim=-1))
         embeddings = self.mapper_2(embeddings) + embeddings
         # Calculate scores for classification.
-        # logits = self.classifier(embeddings).squeeze()
-        logits = self.classifier(torch.cat((bos, eos), dim=-1))
+        logits = self.classifier(embeddings).squeeze()
+        # logits = self.classifier(torch.cat((bos, eos), dim=-1))
 
         loss = None
         losses = []
