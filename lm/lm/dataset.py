@@ -187,7 +187,7 @@ def prepare_features_wikianc(examples, tokenizer, max_length, doc_stride, embedd
             spans, targets = zip(*sorted(zip(spans, targets), key=lambda x: x[0]))
 
         for x, y in spans:
-            tokenized_examples["input_ids"][x:y+1] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
+            input_ids[x:y+1] = [tokenizer.convert_tokens_to_ids(tokenizer.mask_token)] * (y + 1 - x)
 
         tokenized_examples["spans"].append(list(spans))
         tokenized_examples["targets"].append(list(targets))
