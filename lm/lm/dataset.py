@@ -180,12 +180,14 @@ def prepare_features_wikianc(examples, tokenizer, max_length, doc_stride, embedd
                 except Exception:
                     continue
 
-                # if token_start_index != token_end_index:
                 spans.append((token_start_index, token_end_index))
                 targets.append(torch.tensor(embeddings[nodes[qid]]))
         
         if len(spans) > 0:
             spans, targets = zip(*sorted(zip(spans, targets), key=lambda x: x[0]))
+
+        for x, y in spans:
+            tokenized_examples["input_ids"][x:y+1] = tokenizer.convert_tokens_to_ids(tokenizer.mask_token)
 
         tokenized_examples["spans"].append(list(spans))
         tokenized_examples["targets"].append(list(targets))
