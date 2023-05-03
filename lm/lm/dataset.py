@@ -9,6 +9,10 @@ import torch
 from typing import Union, Optional
 from dataclasses import dataclass
 import pyarrow.parquet as pq
+import random
+
+def bernoulli(probability: float) -> bool:
+    return random.random() < probability
 
 def get_span_index(x: int, y: int, length):
     idx = ((length - x) * (length - x + 1)) // 2
@@ -187,7 +191,10 @@ def prepare_features_wikianc(examples, tokenizer, max_length, doc_stride, embedd
             spans, targets = zip(*sorted(zip(spans, targets), key=lambda x: x[0]))
 
         for x, y in spans:
-            input_ids[x:y+1] = [tokenizer.convert_tokens_to_ids(tokenizer.mask_token)] * (y + 1 - x)
+            if bernoulli(0.8):
+                input_ids[x:y+1] = [tokenizer.convert_tokens_to_ids(tokenizer.mask_token)] * (y + 1 - x)
+            elif bernoulli(0.5):
+                input_ids[x:y+1] = [random.randint(0, tokenizer.vocab_size - 1) for _ in range(y + 1 - x)]
 
         tokenized_examples["spans"].append(list(spans))
         tokenized_examples["targets"].append(list(targets))
