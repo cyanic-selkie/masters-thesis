@@ -109,7 +109,8 @@ class NELModel(BertPreTrainedModel):
 
             losses.append(bce_loss)
 
-        loss = sum(losses) / len(losses)
+        if len(losses) > 0:
+            loss = sum(losses) / len(losses)
 
         if not return_dict:
             output = (logits, embeddings)
