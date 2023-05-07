@@ -201,6 +201,74 @@ def prepare_features_wikianc(examples, tokenizer, max_length, doc_stride, embedd
                     
     return tokenized_examples
 
+def prepare_features_evaluate(examples, tokenizer, max_length, doc_stride, embeddings, nodes):
+    tokenized_examples = tokenizer(
+        examples["context"],
+        truncation=True,
+        max_length=max_length,
+        stride=doc_stride,
+        return_overflowing_tokens=True,
+        return_offsets_mapping=True,
+        padding=False,
+    )
+
+    # Since one example might give us several features if it has a long context, we need a map from a feature to
+    # its corresponding example. This key gives us just that.
+    sample_mapping = tokenized_examples.pop("overflow_to_sample_mapping")
+    # The offset mappings will give us a map from token to character position in the original context. This will
+    # help us compute the start_positions and end_positions.
+    offset_mapping = tokenized_examples.pop("offset_mapping")
+        
+    tokenized_examples["spans"] = []
+
+    for i, offsets in enumerate(offset_mapping):
+        input_ids = tokenized_examples["input_ids"][i]
+
+        # One example can give several spans, this is the index of the example containing this span of text.
+        sample_index = sample_mapping[i]
+        
+        spans = []
+
+        for span in examples["entities"][sample_index]:
+            span_start, span_end, qid = span["start"], span["end"], span["qid"]
+
+            if qid is None or qid not in nodes:
+                continue
+
+            # Start token index of the current span in the text.
+            token_start_index = 0
+            
+            while offsets[token_start_index][0] == 0 and offsets[token_start_index][1] == 0:
+                token_start_index += 1
+
+            # End token index of the current span in the text.
+            token_end_index = len(input_ids) - 1
+            
+            while offsets[token_end_index][0] == 0 and offsets[token_end_index][1] == 0:
+                token_end_index -= 1
+            
+            # Detect if the span is out of the sequence length.
+            if (offsets[token_start_index][0] <= span_start and offsets[token_end_index][1] >= span_end):
+                # Move the token_start_index and token_end_index to the two ends of the span.
+                # Note: we could go after the last offset if the span is the last word (edge case).
+                try:
+                    while offsets[token_start_index][0] < span_start:
+                        token_start_index += 1
+
+                    while offsets[token_end_index][1] > span_end:
+                        token_end_index -= 1
+                except Exception:
+                    continue
+
+                spans.append((token_start_index, token_end_index))
+        
+        if len(spans) > 0:
+            spans = sorted(spans)
+
+        tokenized_examples["spans"].append(list(spans))
+                    
+    return tokenized_examples
+
 def prepare_features_conll(examples, tokenizer, max_length, doc_stride):
     tokenized_examples = tokenizer(
         examples["context"],
@@ -302,17 +370,17 @@ def get_dataset_wikianc(tokenizer, embedding_size, embeddings, nodes):
 
     return dataset
 
-def get_dataset_conll(tokenizer):
-    max_length = tokenizer.model_max_length
-    doc_stride = max_length // 2
+# def get_dataset_evaluate(tokenizer, embedding_size, embeddings, nodes):
+def get_dataset_evaluate():
+    # max_length = tokenizer.model_max_length
+    # doc_stride = max_length // 2
 
     dataset = load_dataset("cyanic-selkie/aida-conll-yago-wikidata")
-    dataset = dataset.remove_columns(["uuid", "document_id", "sentence_index"])
-    dataset = dataset.rename_columns({"text": "context"})
-    dataset = dataset.filter(lambda x: x["context"].strip() != "" and len(x["entities"]) > 0)
-    dataset = dataset.map(lambda x: prepare_features_conll(x, tokenizer, max_length, doc_stride), batched=True, remove_columns=["context", "entities"])
+    # dataset = dataset.remove_columns(["uuid", "document_id", "sentence_index"])
+    # dataset = dataset.rename_columns({"text": "context"})
+    # dataset = dataset.filter(lambda x: x["context"].strip() != "" and len(x["anchors"]) > 0)
 
-    dataset = dataset.shuffle(seed=42)
-    dataset.set_format(type="torch")
+    # dataset = dataset.shuffle(seed=42)
+    # dataset.set_format(type="torch")
 
     return dataset
