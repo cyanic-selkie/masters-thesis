@@ -41,7 +41,7 @@ def get_candidates(index, lemmatizer, query, nodes):
     return qids, scores, names
 
 def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, nodes: Dict[int, int], embeddings, index, tokenizer, model, lemmatizer):
-    inputs = tokenizer(text, return_offsets_mapping=True, return_tensors="pt")
+    inputs = tokenizer(text, return_offsets_mapping=True, truncation=True, return_tensors="pt")
 
     token_spans = []
     for span in spans:
@@ -53,26 +53,32 @@ def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, nodes: Dic
             if s == 0 and e == 0:
                 continue
 
+            if s >= 512:
+                break
+
             # TODO make this more robust
             if s == x:
                 start = i
             if e == y:
                 end = i  
 
-        token_spans.append(get_span_index(start, end, inputs["input_ids"].shape[1]))
+        if start != 0 and end != 0:
+            token_spans.append((start, end))
+            #token_spans.append(get_span_index(start, end, inputs["input_ids"].shape[1]))
 
     del inputs["offset_mapping"]
  
-    span_indices = torch.linspace(0, inputs["input_ids"].shape[1] - 1, inputs["input_ids"].shape[1], dtype=torch.int32)
-    span_indices = torch.combinations(span_indices, 2, with_replacement=True)
+    #span_indices = torch.linspace(0, inputs["input_ids"].shape[1] - 1, inputs["input_ids"].shape[1], dtype=torch.int32)
+    #span_indices = torch.combinations(span_indices, 2, with_replacement=True)
+    span_indices = torch.tensor(token_spans)
     span_indices = span_indices.unsqueeze(0)
 
     output = model(**inputs, span_indices=span_indices)["embeddings"]
 
     result = []
-    for span in token_spans:
-        mention = tokenizer.decode(inputs["input_ids"][0][span_indices[0][span][0]:span_indices[0][span][1] + 1])
-        embedding = output[0][span].detach().numpy()
+    for i, (x, y) in enumerate(token_spans):
+        mention = tokenizer.decode(inputs["input_ids"][0][x:y + 1])
+        embedding = output[0][i].detach().numpy()
         candidates, fts_scores, names = get_candidates(index, lemmatizer, mention, nodes)
 
         qids = []
@@ -80,7 +86,7 @@ def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, nodes: Dic
             scores = np.dot(embeddings[[nodes[qid] for qid in candidates]], embedding)
             indices = np.argpartition(scores, -min(top_k, len(scores)))
             indices = indices[-min(top_k, len(scores)):]
-            
+
             qids = [(candidates[i], names[i], fts_scores[i], scores[i]) for i in indices]
 
         qids.sort(key=lambda x: x[3])

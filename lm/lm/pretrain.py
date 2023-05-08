@@ -1,18 +1,17 @@
 import os
 import argparse
-from dataset import get_dataset_wikianc, DataCollatorForNELMapper
+from dataset import get_dataset_wikianc, DataCollatorForEL
 from model import instantiate_model
 from transformers import TrainingArguments, Trainer
 import torch
 from torch import nn
 import numpy as np
-import evaluate
 import os
 import pyarrow.parquet as pq
 from math import ceil
 
-def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, gradient_accumulation_steps, devices, embedding_size, classes_num, dataset, continue_training):
-    data_collator = DataCollatorForNELMapper(tokenizer, embedding_size, devices)
+def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, gradient_accumulation_steps, devices, embedding_size, dataset, continue_training):
+    data_collator = DataCollatorForEL(tokenizer, embedding_size, devices)
 
     args = TrainingArguments(
         output_dir=f"models/{name}",
@@ -51,7 +50,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--name", type=str, required=True)
     parser.add_argument("--checkpoint", type=str, required=True)
-    parser.add_argument("--classes-num", type=int, required=True)
     parser.add_argument("--embedding-size", type=int, required=True)
     parser.add_argument("--learning-rate", type=float, required=True)
     parser.add_argument("--warmup-steps", type=float, required=True)
@@ -63,8 +61,8 @@ if __name__ == "__main__":
     parser.add_argument("--continue-training", action="store_true")
     args = parser.parse_args()
 
-    model, tokenizer = instantiate_model(args.checkpoint, args.embedding_size, args.classes_num)
+    model, tokenizer = instantiate_model(args.checkpoint, args.embedding_size)
 
     dataset = get_dataset_wikianc(tokenizer, args.embedding_size, args.embeddings, args.nodes)
 
-    train(model, args.checkpoint, tokenizer, args.name, args.batch_size, args.learning_rate, args.warmup_steps, args.gradient_accumulation_steps, args.devices, args.embedding_size, args.classes_num, dataset, args.continue_training)
+    train(model, args.checkpoint, tokenizer, args.name, args.batch_size, args.learning_rate, args.warmup_steps, args.gradient_accumulation_steps, args.devices, args.embedding_size, dataset, args.continue_training)

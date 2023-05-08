@@ -7,18 +7,15 @@ import torch.nn as nn
 from transformers.utils import ModelOutput
 import os
 
-class NELOutput(ModelOutput):
+class ELOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     embeddings: torch.FloatTensor
-    logits: torch.FloatTensor
    
-class NELModel(BertPreTrainedModel):
+class ELModel(BertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.classes_num = config.classes_num
-
         self.bert = BertModel(config, add_pooling_layer=False)
 
         self.mapper_1 = nn.Linear(config.hidden_size * 2, config.embedding_size)
@@ -27,13 +24,6 @@ class NELModel(BertPreTrainedModel):
             nn.GELU(),
             nn.LayerNorm(config.embedding_size),
             nn.Linear(config.embedding_size, config.embedding_size),
-        )
-
-        self.classifier = nn.Sequential(
-            nn.Linear(config.embedding_size, config.embedding_size),
-            nn.GELU(),
-            nn.LayerNorm(config.embedding_size),
-            nn.Linear(config.embedding_size, config.classes_num),
         )
 
         # Initialize weights and apply final processing
@@ -51,11 +41,10 @@ class NELModel(BertPreTrainedModel):
         span_indices: Optional[torch.Tensor] = None,
         span_mask: Optional[torch.Tensor] = None,
         targets: Optional[torch.Tensor] = None,
-        class_weights: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], NELOutput]:
+    ) -> Union[Tuple[torch.Tensor], ELOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bert(
@@ -72,15 +61,12 @@ class NELModel(BertPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        span_indices = span_indices.squeeze()
-        bos = sequence_output[:, span_indices[:, 0].squeeze(), :]
-        eos =  sequence_output[:, span_indices[:, 1].squeeze(), :]
+        span_indices = span_indices.squeeze(0)
+        bos = sequence_output[:, span_indices[:, 0], :]
+        eos =  sequence_output[:, span_indices[:, 1], :]
         # Combine boundary token embeddings into a single span embedding.
         embeddings = self.mapper_1(torch.cat((bos, eos), dim=-1))
         embeddings = self.mapper_2(embeddings) + embeddings
-        # Calculate scores for classification.
-        logits = self.classifier(embeddings).squeeze()
-        # logits = self.classifier(torch.cat((bos, eos), dim=-1))
 
         loss = None
         losses = []
@@ -96,47 +82,21 @@ class NELModel(BertPreTrainedModel):
 
             losses.append(mse_loss)
 
-        if labels is not None:
-            mask = span_mask.view(-1)
-
-            if mask.sum() == 0:
-                bce_loss = torch.tensor(0., requires_grad=True)
-            else:
-                class_weights = class_weights.squeeze()
-                loss_fct = nn.CrossEntropyLoss(reduction='none', weight=class_weights)
-                bce_loss = loss_fct(logits.view(-1, self.classes_num), labels.view(-1))
-                bce_loss = (bce_loss * mask.float()).sum() / (class_weights[labels.view(-1)] * mask).sum()
-
-            losses.append(bce_loss)
-
-        if len(losses) > 0:
-            loss = sum(losses) / len(losses)
-
         if not return_dict:
-            output = (logits, embeddings)
+            output = (embeddings, )
             return ((loss,) + output) if loss is not None else output
 
-        return NELOutput(
+        return ELOutput(
             loss=loss,
             embeddings=embeddings,
-            logits=logits,
         )
 
-def instantiate_model(checkpoint, embedding_size, classes_num):
+def instantiate_model(checkpoint, embedding_size):
     tokenizer = AutoTokenizer.from_pretrained(checkpoint, model_max_length=512, do_lower_case=False)
     config = AutoConfig.from_pretrained(checkpoint, output_attentions=True, output_hidden_states=True)
     config = config.to_dict()
     config["embedding_size"] = embedding_size
-    config["classes_num"] = classes_num
-    config["id2label"] = {
-        0: "O",
-        1: "ENTITY"
-    }
-    config["label2id"] = {
-        "O": 0,
-        "ENTITY": 1
-    }
     config = BertConfig.from_dict(config)
-    model = NELModel.from_pretrained(checkpoint, config=config, ignore_mismatched_sizes=True)
+    model = ELModel.from_pretrained(checkpoint, config=config, ignore_mismatched_sizes=True)
 
     return model, tokenizer
