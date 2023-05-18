@@ -1,14 +1,11 @@
 from typing import Optional, Tuple, Union, List, Dict
-import tantivy
 
-import numpy as np
-import pyarrow.parquet as pq
-import torch
-import torch.nn as nn
-from transformers import AutoTokenizer, BertModel, BertPreTrainedModel, AutoModelForTokenClassification, pipeline
-from transformers.utils import ModelOutput
-from model import NELModel
-import spacy
+# import numpy as np
+# import tantivy
+# import torch
+# from transformers import AutoTokenizer
+# from model import ELModel
+# import spacy
 import unicodedata
 from pprint import pprint as pp
 
@@ -17,7 +14,7 @@ def get_span_index(x: int, y: int, length):
     idx = -(idx - (y - x))
     return idx 
 
-def get_candidates(index, lemmatizer, query, nodes):
+def get_candidates(index, lemmatizer, query):
     searcher = index.searcher()
     query = unicodedata.normalize("NFC", query)
     query = [token.lemma_.lower() for token in lemmatizer(query) if not token.is_stop and not token.is_punct]
@@ -33,15 +30,14 @@ def get_candidates(index, lemmatizer, query, nodes):
         doc = searcher.doc(addr)
         qid = doc["qid"][0]
         name = doc["name"][0]
-        if qid in nodes:
-            qids.append(qid)
-            scores.append(score)
-            names.append(name)
+        qids.append(qid)
+        scores.append(score)
+        names.append(name)
 
     return qids, scores, names
 
-def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, nodes: Dict[int, int], embeddings, index, tokenizer, model, lemmatizer):
-    inputs = tokenizer(text, return_offsets_mapping=True, truncation=True, return_tensors="pt")
+def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, embeddings, index, tokenizer, model, lemmatizer) -> List[List[Tuple[int, str, float, float]]]:
+    inputs = tokenizer(text, truncation=True, max_length=512, stride=256, return_overflowing_tokens=True, return_offsets_mapping=True, return_tensors="pt", padding=True)
 
     token_spans = []
     for span in spans:
@@ -75,29 +71,30 @@ def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, nodes: Dic
 
     output = model(**inputs, span_indices=span_indices)["embeddings"]
 
-    result = []
+    predictions= []
     for i, (x, y) in enumerate(token_spans):
         mention = tokenizer.decode(inputs["input_ids"][0][x:y + 1])
         embedding = output[0][i].detach().numpy()
-        candidates, fts_scores, names = get_candidates(index, lemmatizer, mention, nodes)
+        candidates, candidate_indices, fts_scores, names = get_candidates(index, lemmatizer, mention)
 
-        qids = []
+        prediction= []
         if len(candidates) > 0:
-            scores = np.dot(embeddings[[nodes[qid] for qid in candidates]], embedding)
+            scores = np.dot(embeddings[candidate_indices], embedding)
             indices = np.argpartition(scores, -min(top_k, len(scores)))
             indices = indices[-min(top_k, len(scores)):]
 
-            qids = [(candidates[i], names[i], fts_scores[i], scores[i]) for i in indices]
+            prediction = [(candidates[i], names[i], fts_scores[i], scores[i]) for i in indices]
 
-        qids.sort(key=lambda x: x[3])
+        prediction.sort(key=lambda x: x[3])
 
-        result.append(qids)
+        predictions.append(prediction)
 
-    return result
+    return predictions
 
 def initialize_disambiguation():
     schema_builder = tantivy.SchemaBuilder()
     schema_builder.add_integer_field("qid", stored=True, indexed=True)
+    schema_builder.add_integer_field("idx", stored=True, indexed=True)
     schema_builder.add_text_field("name", stored=True, index_option='basic')
     schema_builder.add_text_field("alias", stored=True)
     schema = schema_builder.build()
@@ -106,44 +103,26 @@ def initialize_disambiguation():
 
     lemmatizer = spacy.load("en_core_web_lg", disable=["senter", "parser", "ner"])
 
-    tokenizer = AutoTokenizer.from_pretrained("models/mapper-3-3")
-    model = NELModel.from_pretrained("models/mapper-3-3")
+    tokenizer = AutoTokenizer.from_pretrained("models/mapper")
+    model = ELModel.from_pretrained("models/mapper")
 
-    nodes = {qid: i for i, qid in enumerate(pq.read_table("data/nodes.parquet")["qid"].to_pylist())}
-    embeddings = np.memmap("data/embeddings.npy", np.float32, "r", shape=(len(nodes), 128))
+    embeddings = np.memmap("data/embeddings.npy", np.float32, "r", shape=(99385029, 128))
 
-    return index, lemmatizer, tokenizer, model, nodes, embeddings
-
-def initialize_detection():
-    ner_tokenizer = AutoTokenizer.from_pretrained("dslim/bert-large-NER")
-    ner_model = AutoModelForTokenClassification.from_pretrained("dslim/bert-large-NER")
-    ner = pipeline("ner", model=ner_model, tokenizer=ner_tokenizer, aggregation_strategy="first") 
-
-    return ner
+    return index, lemmatizer, tokenizer, model, embeddings
 
 if __name__ == "__main__":
-    # text = "Michael Jordan (born February 25, 1956) is an American scientist, professor at the University of California, Berkeley and researcher in machine learning, statistics, and artificial intelligence." 
-    # text = "In November 1939, the United States was taking measures to assist China and the Western Allies and amended the Neutrality Act to allow \"cash and carry\" purchases by the Allies. In 1940, following the German capture of Paris, the size of the United States Navy was significantly increased. In September the United States further agreed to a trade of American destroyers for British bases. Still, a large majority of the American public continued to oppose any direct military intervention in the conflict well into 1941. In December 1940, Roosevelt accused Hitler of planning world conquest and ruled out any negotiations as useless, calling for the United States to become an \"arsenal of democracy\" and promoting Lend-Lease programmes of military and humanitarian aid to support the British war effort, which was later extended to the other Allies, including the Soviet Union. The United States started strategic planning to prepare for a full-scale offensive against Germany."
-    text = "The first decade of the 20th century saw increasing diplomatic tension between the European great powers. This reached breaking point on 28 June 1914, when a Bosnian Serb named Gavrilo Princip assassinated Archduke Franz Ferdinand, heir to the Austro-Hungarian throne. Austria-Hungary held Serbia responsible, and declared war on 28 July. Russia came to Serbia's defence, and by 4 August, defensive alliances had drawn in Germany, France, and Britain, with the Ottoman Empire joining the war in November."
-    #text = "Michael Jordan is an American scientist, professor at the University of California, Berkeley and researcher in machine learning, statistics, and artificial intelligence. However, that is not who we are refering to. We are, in fact, talking about Michael Jordan who played 15 seasons for the Chicago Bulls and is considered to be one of the best basketball players of all time."
-    #text = "Michael Jeffrey Jordan, also known by his initials MJ, is an American former professional basketball player and businessman."
-    #text = "In the war, American patriot forces were supported by the Kingdom of France and the Kingdom of Spain. The British, in turn, were supported by Hessian soldiers from present-day Germany, most Native Americans, Loyalists, and freedmen. The conflict was fought in North America, the Caribbean, and the Atlantic Ocean."
-    #text = "This irony will not be lost on Queen Camilla. The former Lady Elizabeth Bowes-Lyon transformed the fortunes of the monarchy: first as a steadfast supporter to her stumbling, stammering husband King George VI during the dark days of World War II and then, through the long years of widowhood, to her daughter, Queen Elizabeth II."
-    #text = "Russian state television showed Putin looking bloated as he engaged in discussions with Economic Development Minister Maxim Reshetnikov at his official residence, less than 48 hours after fireballs erupted above the Kremlin's roof."
-    #text = "Hunter daughter Finnegan going to King's coronation with Jill Biden."
-    ner = initialize_detection()
-    mentions = ner(text)
+    text: str = """Cofinec plunges on H1 results . Emese Bartha BUDAPEST 1996-08-30 Shares of France-registered printed packaging company Cofinec S.A. plunged sharply on the Budapest Stock Exchange ( BSE ) on Friday , despite a mostly reassuring forecast by the group . Cofinec 's Global Depositary Receipts ( GDRs ) opened at 5,200 forints on the BSE , down 600 from Thursday 's close , following the release of its first half results this morning . Cofinec CEO Stephen Frater told reporters in a conference call from Vienna on Friday before the opening of the bourse that he expects a stronger second half , although the group will not be able to achieve its annual profit goal . " We will not achieve the full 37 million French franc ( net ) profit forecast , " Frater said . " Obviously , we cannot make up the unexpected decrease that has been experienced in the first half of the year . " Frater declined to give a forecast for the full year , ahead of a supervisory board meeting next week . Cofinec , the first foreign company to list on the Budapest bourse , released its consolidated first half figures ( IAS ) this morning . In the conference call , Frater said he regarded Cofinec GDRs -- which are trading below their issue price of 6,425 forints -- as a buying opportunity . " Obviously , at some point it represents a buying opportunity , " Frater said . " I think the reality is that we operate in emerging markets , emerging markets tend to be more volatile . " " My message is that the fundamental strategy of the company , its fundamental market position has not changed . " The group , which operates in Hungary , Poland and the Czech Republic , reported an operating profit before interest of 21.8 million French francs compared to 34.1 million in the same six months of 1995 . Net profit for the January-June 1996 period was 2.1 million French francs , down from 10.3 million in the first six months of 1995 , with the bulk of this decline attributable to the performance of Petofi , one of its Hungarian units . Cofinec said Petofi general manager Laszlo Sebesvari had submitted his resignation and will be leaving Petofi but will remain on Petofi 's board of directors . " Until a new general manager of Petofi is appointed ... I will in fact move to Kecskemet ( site of Petofi printing house ) for the interim and will serve as acting chief executive officer of Petofi , " Frater said . -- Budapest newsroom ( 36 1 ) 327 4040"""
+    mentions: List[Tuple[int, int]] = [(45, 53), (155, 178), (181, 184), (329, 332), (500, 506), (705, 711), (1031, 1039), (1605, 1612), (1615, 1621), (1630, 1644), (1708, 1714), (1840, 1846), (1998, 2007), (2256, 2265), (2396, 2404)]
+    qids: List[int] = [1781, 851259, 851259, 851259, 1741, 142, 1781, 28, 36, 213, 142, 142, 28, 171357, 1781]
 
-    surface_forms = []
-    spans = []
-    for mention in mentions:
-        surface_forms.append(mention["word"])
-        spans.append((mention["start"], mention["end"]))
+    for (x, y), qid in zip(mentions, qids):
+        print(text[x:y], qid)
 
-    index, lemmatizer, tokenizer, model, nodes, embeddings = initialize_disambiguation()
+    exit()
 
-    results = disambiguate(text, spans, 5, nodes, embeddings, index, tokenizer, model, lemmatizer)
+    index, lemmatizer, tokenizer, model, embeddings = initialize_disambiguation()
 
-    for surface_form, result in zip(surface_forms, results):
-        print(surface_form)
-        pp(result)
+    predictions: List[List[Tuple[int, str, float, float]]] = disambiguate(text, mentions, 5, embeddings, index, tokenizer, model, lemmatizer)
+
+    for mention, qid, prediction in zip(mentions, qids, predictions):
+        print(mention, qid, prediction[-1] if len(prediction) > 0 else None)
