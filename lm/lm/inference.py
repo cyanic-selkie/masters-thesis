@@ -10,11 +10,6 @@ from transformers import AutoTokenizer
 from model import ELModel
 import spacy
 
-def get_span_index(x: int, y: int, length):
-    idx = ((length - x) * (length - x + 1)) // 2
-    idx = -(idx - (y - x))
-    return idx 
-
 def get_candidates(index, lemmatizer, query):
     searcher = index.searcher()
     query = unicodedata.normalize("NFC", query)
@@ -53,7 +48,7 @@ def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, embeddings
         
         spans = []
 
-        for span_start, span_end in mentions:
+        for span_start, span_end in spans:
             # Start token index of the current span in the text.
             token_start_index = 0
             
