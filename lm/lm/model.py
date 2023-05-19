@@ -61,9 +61,13 @@ class ELModel(BertPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        span_indices = span_indices.squeeze(0)
-        bos = sequence_output[:, span_indices[:, 0], :]
-        eos =  sequence_output[:, span_indices[:, 1], :]
+        # span_indices = span_indices.squeeze(0)
+        bos_indices = span_indices[:,:,0].unsqueeze(-1).expand(-1, -1, sequence_output.shape[-1])
+        eos_indices = span_indices[:,:,1].unsqueeze(-1).expand(-1, -1, sequence_output.shape[-1])
+        bos = torch.gather(sequence_output, 1, bos_indices)
+        eos = torch.gather(sequence_output, 1, eos_indices)
+        # bos = sequence_output[:, span_indices[:, :, 0], :]
+        # eos =  sequence_output[:, span_indices[:, :, 1], :]
         # Combine boundary token embeddings into a single span embedding.
         embeddings = self.mapper_1(torch.cat((bos, eos), dim=-1))
         embeddings = self.mapper_2(embeddings) + embeddings
