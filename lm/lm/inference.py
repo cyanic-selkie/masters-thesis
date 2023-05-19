@@ -96,10 +96,11 @@ def disambiguate(text: str, mentions: List[Tuple[int, int]], top_k: int, embeddi
                 break
 
             mention = tokenizer.decode(input_ids[x:y + 1])
-            candidate_qids, candidate_indices, fts_scores, preferred_names = get_candidates(index, lemmatizer, mention)
 
-            if len(candidate_qids) == 0:
-                continue
+            offset = (stride - 2) * i
+            key = (x + offset, y + offset)
+
+            candidate_qids, candidate_indices, fts_scores, preferred_names = get_candidates(index, lemmatizer, mention)
 
             scores = np.dot(embeddings[candidate_indices], predicted_embedding.detach().numpy())
             top_k_indices = np.argpartition(scores, -min(top_k, len(scores)))
@@ -107,12 +108,10 @@ def disambiguate(text: str, mentions: List[Tuple[int, int]], top_k: int, embeddi
 
             prediction = [(candidate_qids[k], preferred_names[k], fts_scores[k], scores[k]) for k in reversed(top_k_indices)]
 
-            offset = (stride - 2) * i
-            key = (x + offset, y + offset)
-
             predictions[key].extend(prediction)
             predictions[key].sort(key=lambda x: x[3], reverse=True)
             predictions[key] = predictions[key][:top_k]
+
             if not key in order:
                 order.append(key)
 

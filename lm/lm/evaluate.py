@@ -1,6 +1,6 @@
 from inference import  disambiguate, initialize_disambiguation
 from dataset import get_dataset_evaluate
-from itertools import groupby
+from tqdm import tqdm
 
 if __name__ == "__main__":
     index, lemmatizer, tokenizer, model, embeddings = initialize_disambiguation()
@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     macro_top5_all = []
     macro_top1_all = []
-    for i, document in enumerate(iter(dataset["validation"])):
+    for i, document in tqdm(enumerate(dataset["validation"])):
         text = document["text"]
         spans = []
         qids = []
@@ -49,8 +49,6 @@ if __name__ == "__main__":
 
         macro_top5_all.append(document_top5_tp / document_all)
         macro_top1_all.append(document_top1_tp / document_all)
-
-        breakpoint()
 
     print(f"Macro Top 5 accuracy: {sum(macro_top5_all) / len(macro_top5_all)}")
     print(f"Macro Top 1 accuracy: {sum(macro_top1_all) / len(macro_top1_all)}")
