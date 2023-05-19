@@ -111,7 +111,10 @@ def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, embeddings
             top_k_indices = top_k_indices[-min(top_k, len(scores)):]
 
             prediction = [(candidate_qids[k], preferred_names[k], fts_scores[k], scores[k]) for k in reversed(top_k_indices)]
-            key = (x + stride * i, y + stride * i)
+
+            offset = (stride - 2) * i
+            key = (x + offset, y + offset)
+
             predictions[key].extend(prediction)
             predictions[key].sort(key=lambda x: x[3], reverse=True)
             predictions[key] = predictions[key][:top_k]
@@ -148,13 +151,10 @@ if __name__ == "__main__":
     # mentions = [(244, 260), (339, 345), (422, 429)]
     # qids: List[int] = [28513, 34266, 43287]
 
-    for (x, y), qid in zip(mentions, qids):
-        print(text[x:y], qid)
-
     index, lemmatizer, tokenizer, model, embeddings = initialize_disambiguation()
 
     predictions: List[List[Tuple[int, str, float, float]]] = disambiguate(text, mentions, 5, embeddings, index, tokenizer, model, lemmatizer)
 
-    for mention, qid, prediction in zip(mentions, qids, predictions):
-        print(mention, qid)
-        print(prediction)
+    for (x, y), qid, prediction in zip(mentions, qids, predictions):
+        print(text[x:y], qid)
+        pp(prediction)
