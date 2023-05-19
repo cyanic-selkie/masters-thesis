@@ -35,7 +35,7 @@ def get_candidates(index, lemmatizer, query):
 
     return qids, indices, scores, names
 
-def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, embeddings, index, tokenizer, model, lemmatizer) -> List[List[Tuple[int, str, float, float]]]:
+def disambiguate(text: str, mentions: List[Tuple[int, int]], top_k: int, embeddings, index, tokenizer, model, lemmatizer) -> List[List[Tuple[int, str, float, float]]]:
     stride = 256
     inputs = tokenizer(text, truncation=True, stride=stride, return_overflowing_tokens=True, return_offsets_mapping=True, return_tensors="pt", padding='longest')
 
@@ -48,7 +48,7 @@ def disambiguate(text: str, spans: List[Tuple[int, int]], top_k: int, embeddings
         
         spans = []
 
-        for span_start, span_end in spans:
+        for span_start, span_end in mentions:
             # Start token index of the current span in the text.
             token_start_index = 0
             
