@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
     macro_top5_all = []
     macro_top1_all = []
-    for i, document in tqdm(enumerate(dataset["validation"])):
+    for i, document in tqdm(enumerate(dataset["validation"]), total=len(dataset["validation"])):
         text = document["text"]
         spans = []
         qids = []
