@@ -2,12 +2,17 @@ import os
 import argparse
 from dataset import get_dataset_conll, DataCollatorForEL
 from model import instantiate_model
-from transformers import TrainingArguments, Trainer
+from transformers import TrainingArguments, Trainer, TrainerCallback
 import torch
 from torch import nn
 import numpy as np
 import os
 from math import ceil
+
+class EvaluateFirstStepCallback(TrainerCallback):
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.global_step == 1:
+            control.should_evaluate = True
 
 def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, gradient_accumulation_steps, embedding_size, dataset, continue_training, epochs):
     data_collator = DataCollatorForEL(tokenizer, embedding_size)
@@ -23,7 +28,7 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
         report_to="wandb",
         save_strategy="epoch",
         save_total_limit=epochs,
-        logging_steps=20,
+        logging_steps=5,
         warmup_steps=warmup_steps,
         gradient_accumulation_steps=gradient_accumulation_steps,
         # remove_unused_columns=False,
@@ -37,6 +42,7 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
         data_collator=data_collator,
         tokenizer=tokenizer,
     )
+    trainer.add_callback(EvaluateFirstStepCallback())
 
     if continue_training:
         trainer.train(checkpoint)

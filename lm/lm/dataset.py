@@ -45,7 +45,7 @@ class DataCollatorForEL(DataCollatorMixin):
 
         return batch
 
-def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings, nodes):
+def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings, nodes, masked):
     tokenized_examples = tokenizer(
         examples["context"],
         truncation=True,
@@ -112,11 +112,12 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings, no
         if len(spans) > 0:
             spans, targets = zip(*sorted(zip(spans, targets), key=lambda x: x[0]))
 
-        for x, y in spans:
-            if bernoulli(0.8):
-                input_ids[x:y+1] = [tokenizer.convert_tokens_to_ids(tokenizer.mask_token)] * (y + 1 - x)
-            elif bernoulli(0.5):
-                input_ids[x:y+1] = [random.randint(0, tokenizer.vocab_size - 1) for _ in range(y + 1 - x)]
+        if masked:
+            for x, y in spans:
+                if bernoulli(0.8):
+                    input_ids[x:y+1] = [tokenizer.convert_tokens_to_ids(tokenizer.mask_token)] * (y + 1 - x)
+                elif bernoulli(0.5):
+                    input_ids[x:y+1] = [random.randint(0, tokenizer.vocab_size - 1) for _ in range(y + 1 - x)]
 
         tokenized_examples["spans"].append(list(spans))
         tokenized_examples["targets"].append(list(targets))
@@ -148,7 +149,7 @@ def get_dataset_wikianc(tokenizer, embedding_size, embeddings, nodes):
     dataset = dataset.remove_columns(["uuid", "article_title", "article_pageid", "article_qid", "section_heading", "section_level"])
     dataset = dataset.rename_columns({"paragraph_text": "context", "paragraph_anchors": "anchors"})
     dataset = dataset.filter(lambda x: has_spans(x, nodes))
-    dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length, doc_stride, embeddings, nodes), batched=True, remove_columns=["context", "anchors"])
+    dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length, doc_stride, embeddings, nodes, True), batched=True, remove_columns=["context", "anchors"])
 
     dataset = dataset.shuffle(seed=42, buffer_size=1000)
     dataset = dataset.with_format(type="torch")
@@ -167,7 +168,7 @@ def get_dataset_conll(tokenizer, embedding_size, embeddings, nodes):
     dataset = dataset.remove_columns(["uuid", "document_id"])
     dataset = dataset.rename_columns({"text": "context", "entities": "anchors"})
     dataset = dataset.filter(lambda x: has_spans(x, nodes), batched=True)
-    dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length, doc_stride, embeddings, nodes), batched=True, remove_columns=["context", "anchors"])
+    dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length, doc_stride, embeddings, nodes, False), batched=True, remove_columns=["context", "anchors"])
 
     dataset = dataset.shuffle(seed=42)
     dataset.set_format(type="torch")
