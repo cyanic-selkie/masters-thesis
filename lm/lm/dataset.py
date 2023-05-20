@@ -167,7 +167,7 @@ def get_dataset_conll(tokenizer, embedding_size, embeddings, nodes):
     
     dataset = dataset.remove_columns(["uuid", "document_id"])
     dataset = dataset.rename_columns({"text": "context", "entities": "anchors"})
-    dataset = dataset.filter(lambda x: has_spans(x, nodes), batched=True)
+    dataset = dataset.filter(lambda x: has_spans(x, nodes))
     dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length, doc_stride, embeddings, nodes, False), batched=True, remove_columns=["context", "anchors"])
 
     dataset = dataset.shuffle(seed=42)
