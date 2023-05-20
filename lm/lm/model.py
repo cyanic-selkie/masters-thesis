@@ -72,13 +72,14 @@ class ELModel(BertPreTrainedModel):
         if targets is not None:
             # Spans with indices == 0 are padding;
             # it's enough to only check the start index.
-            mask = (spans[:, :, 0] == 0).unsqueeze(-1).expand_as(embeddings)
-            masked_embeddings = embeddings.masked_fill(mask, 0)
+            mask = (spans[:, :, 0] != 0).unsqueeze(-1).expand_as(embeddings)
 
             if mask.sum() == 0:
                 loss = torch.tensor(0., requires_grad=True)
             else:
-                loss = nn.MSELoss()(masked_embeddings, targets)
+                loss_fct = nn.MSELoss(reduction='none')
+                loss = loss_fct(embeddings, targets)
+                loss = (loss * mask.float()).sum() / mask.sum()
 
         if not return_dict:
             output = (embeddings, )
