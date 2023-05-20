@@ -14,16 +14,10 @@ import random
 def bernoulli(probability: float) -> bool:
     return random.random() < probability
 
-def get_span_index(x: int, y: int, length):
-    idx = ((length - x) * (length - x + 1)) // 2
-    idx = -(idx - (y - x))
-    return idx 
-
 @dataclass
 class DataCollatorForEL(DataCollatorMixin):
     tokenizer: PreTrainedTokenizerBase
     embedding_size: int
-    devices: int
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
@@ -41,29 +35,13 @@ class DataCollatorForEL(DataCollatorMixin):
             return_tensors="pt",
         )
 
-        sequence_length = batch["input_ids"].shape[1]
+        spans_max_length = max(len(features["spans"]) for features in batch_features)
 
-        # Generate the indices of the spans the model will output.
-        span_indices = torch.linspace(0, sequence_length - 1, sequence_length, dtype=torch.int32)
-        span_indices = torch.combinations(span_indices, 2, with_replacement=True)
-        # Generate the mask the model will use to calculate the losses.
-        batch_span_mask = torch.zeros(batch["input_ids"].shape[0], span_indices.shape[0])
+        batch_spans = torch.stack([torch.cat((feature["spans"], torch.zeros(spans_max_length - len(feature["spans"]), 2, dtype=torch.int64)), dim=0) for feature in batch_features], 0)
+        batch_targets = torch.stack([torch.cat((feature["targets"], torch.zeros(spans_max_length - len(feature["spans"]), self.embedding_size, dtype=torch.int64)), dim=0) for feature in batch_features], 0)
 
-        batch_spans = [feature["spans"] for feature in batch_features]
-
-        batch_sparse_targets = [features["targets"] for features in batch_features]
-        batch_dense_targets = torch.zeros(batch["input_ids"].shape[0], span_indices.shape[0], self.embedding_size)
-
-        for spans, sparse_targets, span_mask, dense_targets in zip(batch_spans, batch_sparse_targets, batch_span_mask, batch_dense_targets):
-            for (x, y), target in zip(spans, sparse_targets):
-                idx = get_span_index(x, y, sequence_length)
-                span_mask[idx] = 1
-                dense_targets[idx] = target
-
-        batch["targets"] = batch_dense_targets
-
-        batch["span_indices"] = np.repeat(span_indices[np.newaxis, :, :], self.devices, axis=0)
-        batch["span_mask"] = batch_span_mask
+        batch["spans"] = batch_spans
+        batch["targets"] = batch_targets
 
         return batch
 
@@ -184,9 +162,9 @@ def get_dataset_conll(tokenizer, embedding_size, embeddings, nodes):
     max_length = tokenizer.model_max_length
     doc_stride = max_length // 2
 
-    dataset = load_dataset("cyanic-selkie/wikianc-en")
+    dataset = load_dataset("cyanic-selkie/aida-conll-yago-wikidata")
     
-    dataset = dataset.remove_columns(["uuid", "document_id", "sentence_index"])
+    dataset = dataset.remove_columns(["uuid", "document_id"])
     dataset = dataset.rename_columns({"text": "context", "entities": "anchors"})
     dataset = dataset.filter(lambda x: has_spans(x, nodes), batched=True)
     dataset = dataset.map(lambda x: prepare_features(x, tokenizer, max_length, doc_stride, embeddings, nodes), batched=True, remove_columns=["context", "anchors"])

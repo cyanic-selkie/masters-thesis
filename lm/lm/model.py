@@ -38,8 +38,7 @@ class ELModel(BertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        span_indices: Optional[torch.Tensor] = None,
-        span_mask: Optional[torch.Tensor] = None,
+        spans: Optional[torch.Tensor] = None,
         targets: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -61,30 +60,25 @@ class ELModel(BertPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        # span_indices = span_indices.squeeze(0)
-        bos_indices = span_indices[:,:,0].unsqueeze(-1).expand(-1, -1, sequence_output.shape[-1])
-        eos_indices = span_indices[:,:,1].unsqueeze(-1).expand(-1, -1, sequence_output.shape[-1])
+        bos_indices = spans[:,:,0].unsqueeze(-1).expand(-1, -1, sequence_output.shape[-1])
+        eos_indices = spans[:,:,1].unsqueeze(-1).expand(-1, -1, sequence_output.shape[-1])
         bos = torch.gather(sequence_output, 1, bos_indices)
         eos = torch.gather(sequence_output, 1, eos_indices)
-        # bos = sequence_output[:, span_indices[:, :, 0], :]
-        # eos =  sequence_output[:, span_indices[:, :, 1], :]
         # Combine boundary token embeddings into a single span embedding.
         embeddings = self.mapper_1(torch.cat((bos, eos), dim=-1))
         embeddings = self.mapper_2(embeddings) + embeddings
 
         loss = None
-        losses = []
         if targets is not None:
-            mask = span_mask.unsqueeze(-1).expand_as(embeddings)
+            # Spans with indices == 0 are padding;
+            # it's enough to only check the start index.
+            mask = (spans[:, :, 0] == 0).unsqueeze(-1).expand_as(embeddings)
+            masked_embeddings = embeddings.masked_fill(mask, 0)
 
             if mask.sum() == 0:
-                mse_loss = torch.tensor(0., requires_grad=True)
+                loss = torch.tensor(0., requires_grad=True)
             else:
-                loss_fct = nn.MSELoss(reduction='none')
-                mse_loss = loss_fct(embeddings, targets)
-                mse_loss = (mse_loss * mask.float()).sum() / mask.sum()
-
-            losses.append(mse_loss)
+                loss = nn.MSELoss()(masked_embeddings, targets)
 
         if not return_dict:
             output = (embeddings, )
