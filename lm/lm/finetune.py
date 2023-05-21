@@ -41,8 +41,6 @@ def train(model, checkpoint, tokenizer, name, embedding_size, dataset, epochs):
     )
 
     best_trial = trainer.hyperparameter_search(
-        hp_space=lambda trial: {
-        },
         direction="minimize",
         backend="ray",
         n_trials = 10,
