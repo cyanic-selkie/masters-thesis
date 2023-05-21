@@ -1,10 +1,10 @@
 import os
 import argparse
+import torch
+from torch import nn
 from dataset import get_dataset_conll, DataCollatorForEL
 from model import instantiate_model
 from transformers import TrainingArguments, Trainer, TrainerCallback
-import torch
-from torch import nn
 import numpy as np
 import os
 from math import ceil
@@ -12,7 +12,7 @@ from ray.tune.schedulers import PopulationBasedTraining
 from ray import tune
 from transformers.optimization import AdamW, get_constant_schedule
 
-def train(model, checkpoint, tokenizer, name, embedding_size, dataset, epochs):
+def train(checkpoint, tokenizer, name, embedding_size, dataset, epochs):
     data_collator = DataCollatorForEL(tokenizer, embedding_size)
 
     args = TrainingArguments(
@@ -32,8 +32,8 @@ def train(model, checkpoint, tokenizer, name, embedding_size, dataset, epochs):
     )
 
     trainer = Trainer(
-        model,
-        args,
+        model_init=lambda: instantiate_model(checkpoint, embedding_size)[0],
+        args=args,
         train_dataset=dataset["train"],
         eval_dataset=dataset["validation"],
         data_collator=data_collator,
@@ -66,8 +66,8 @@ if __name__ == "__main__":
     parser.add_argument("--nodes", type=str, required=True)
     args = parser.parse_args()
 
-    model, tokenizer = instantiate_model(args.checkpoint, args.embedding_size)
+    _, tokenizer = instantiate_model(args.checkpoint, args.embedding_size)
 
     dataset = get_dataset_conll(tokenizer, args.embedding_size, args.embeddings, args.nodes)
 
-    train(model, args.checkpoint, tokenizer, args.name, args.embedding_size, dataset, args.epochs)
+    train(args.checkpoint, tokenizer, args.name, args.embedding_size, dataset, args.epochs)
