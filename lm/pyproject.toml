@@ -16,6 +16,7 @@ pyarrow = "^11.0.0"
 seqeval = "^1.2.2"
 spacy = "^3.5.3"
 tantivy = {git = "https://github.com/quickwit-oss/tantivy-py"}
+ray = {extras = ["tune"], version = "^2.4.0"}
 
 [build-system]
 requires = ["poetry-core"]
