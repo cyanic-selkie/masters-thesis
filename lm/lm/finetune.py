@@ -37,9 +37,6 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
         tokenizer=tokenizer,
     )
 
-    trainer.evaluate()
-    return
-
     if continue_training:
         trainer.train(checkpoint)
     else:
