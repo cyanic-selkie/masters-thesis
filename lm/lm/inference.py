@@ -86,7 +86,7 @@ def disambiguate(text: str, mentions: List[Tuple[int, int]], top_k: int, embeddi
 
     span_indices = torch.tensor(padded_document_token_spans)
 
-    document_predicted_embeddings = model(**inputs, span_indices=span_indices)["embeddings"]
+    document_predicted_embeddings = model(**inputs, spans=span_indices)["embeddings"]
 
     predictions = defaultdict(lambda: [])
     order = []

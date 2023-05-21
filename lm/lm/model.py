@@ -37,12 +37,12 @@ class ELModel(BertPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
         spans: Optional[torch.Tensor] = None,
         targets: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        return_loss: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], ELOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -69,7 +69,7 @@ class ELModel(BertPreTrainedModel):
         embeddings = self.mapper_2(embeddings) + embeddings
 
         loss = None
-        if targets is not None:
+        if return_loss and targets:
             # Spans with indices == 0 are padding;
             # it's enough to only check the start index.
             mask = (spans[:, :, 0] != 0).unsqueeze(-1).expand_as(embeddings)

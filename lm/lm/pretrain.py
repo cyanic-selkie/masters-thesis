@@ -7,7 +7,6 @@ import torch
 from torch import nn
 import numpy as np
 import os
-import pyarrow.parquet as pq
 from math import ceil
 
 def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_steps, gradient_accumulation_steps, embedding_size, dataset, continue_training):
@@ -29,7 +28,6 @@ def train(model, checkpoint, tokenizer, name, batch_size, learning_rate, warmup_
         warmup_steps=warmup_steps,
         gradient_accumulation_steps=gradient_accumulation_steps,
         max_steps=ceil(34555183 / (gradient_accumulation_steps * batch_size)),
-        remove_unused_columns=False,
     )
 
     trainer = Trainer(
