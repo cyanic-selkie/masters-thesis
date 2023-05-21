@@ -42,18 +42,21 @@ def train(model, checkpoint, tokenizer, name, embedding_size, dataset, epochs):
 
     best_trial = trainer.hyperparameter_search(
         hp_space=lambda trial: {
-            "learning_rate": tune.loguniform(1e-6, 1e-4),
-            "gradient_accumulation_steps": tune.choice([1, 2, 4])
         },
         direction="minimize",
         backend="ray",
         n_trials = 10,
-        scheduler=PopulationBasedTraining(metric="loss", mode="min"),
+        scheduler=PopulationBasedTraining(
+            metric="loss", mode="min"
+            hyperparam_mutations={
+                "learning_rate": tune.loguniform(1e-6, 1e-4),
+                # "weight_decay": tune.loguniform(0, 0.3),
+                "gradient_accumulation_steps": [1, 2, 4]
+            }
+        ),
     )
 
     print(best_trial)
-
-    # trainer.train()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
