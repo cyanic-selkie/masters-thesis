@@ -43,13 +43,15 @@ def train(model, checkpoint, tokenizer, name, embedding_size, dataset, epochs):
     best_trial = trainer.hyperparameter_search(
         hp_space=lambda trial: {
             "learning_rate": tune.loguniform(1e-6, 1e-4),
-            "per_device_train_batch_size": tune.choice([16, 32])
+            "gradient_accumulation_steps": tune.choice([1, 2, 4])
         },
         direction="minimize",
         backend="ray",
         n_trials = 10,
         scheduler=PopulationBasedTraining(metric="loss", mode="min"),
     )
+
+    print(best_trial)
 
     # trainer.train()
 
