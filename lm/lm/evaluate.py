@@ -1,11 +1,21 @@
 from inference import disambiguate, initialize_disambiguation
 from dataset import get_dataset_evaluate
 from tqdm import tqdm
+import argparse
+import csv
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--split",
+                        choices=["validation", "test"],
+                        type=str,
+                        required=True)
+    parser.add_argument("--errors", type=str, required=True)
+    args = parser.parse_args()
+
     resources = initialize_disambiguation()
 
-    index, lemmatizer, tokenizer, model, embeddings = resources
+    index, lemmatizer, tokenizer, model, embeddings, filter = resources
 
     dataset = get_dataset_evaluate()
 
@@ -15,8 +25,10 @@ if __name__ == "__main__":
 
     macro_top5_all = []
     macro_top1_all = []
-    for i, document in tqdm(enumerate(dataset["validation"]),
-                            total=len(dataset["validation"])):
+
+    errors = []
+    for i, document in tqdm(enumerate(dataset[args.split]),
+                            total=len(dataset[args.split])):
         text = document["text"]
         spans = []
         qids = []
@@ -29,7 +41,7 @@ if __name__ == "__main__":
             continue
 
         predictions = disambiguate(text, spans, 5, embeddings, index,
-                                   tokenizer, model, lemmatizer)
+                                   tokenizer, model, lemmatizer, filter)
         prediction_qids = []
         prediction_names = []
         for prediction in predictions:
@@ -39,7 +51,7 @@ if __name__ == "__main__":
         document_top5_tp = 0
         document_top1_tp = 0
         document_all = 0
-        for qid, prediction_qid, prediction_name, span in zip(
+        for qid, prediction_qid, prediction_name, (x, y) in zip(
                 qids, prediction_qids, prediction_names, spans):
             if qid in prediction_qid:
                 micro_top5_tp += 1
@@ -48,12 +60,23 @@ if __name__ == "__main__":
             if len(prediction_qid) > 0 and qid == prediction_qid[0]:
                 micro_top1_tp += 1
                 document_top1_tp += 1
+            elif len(prediction_qid) > 0 and qid != prediction_qid[0]:
+                errors.append((text, x, y, qid, text[x:y], prediction_qid,
+                               prediction_name))
 
             micro_all += 1
             document_all += 1
 
         macro_top5_all.append(document_top5_tp / document_all)
         macro_top1_all.append(document_top1_tp / document_all)
+
+        with open(args.errors, "w") as out:
+            writer = csv.writer(out)
+            writer.writerow([
+                "text", "start", "end", "qid", "surface_form", "predicted_qid",
+                "predicted_name"
+            ])
+            writer.writerows(errors)
 
     print(f"Macro Top 5 accuracy: {sum(macro_top5_all) / len(macro_top5_all)}")
     print(f"Macro Top 1 accuracy: {sum(macro_top1_all) / len(macro_top1_all)}")

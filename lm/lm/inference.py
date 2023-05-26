@@ -9,9 +9,10 @@ import torch
 from transformers import AutoTokenizer
 from model import ELModel
 import spacy
+import pickle
 
 
-def get_candidates(index, lemmatizer, query):
+def get_candidates(index, lemmatizer, query, filter):
     searcher = index.searcher()
     query = unicodedata.normalize("NFC", query)
     query = [
@@ -32,17 +33,19 @@ def get_candidates(index, lemmatizer, query):
         qid = doc["qid"][0]
         idx = doc["idx"][0]
         name = doc["name"][0]
-        qids.append(qid)
-        indices.append(idx)
-        scores.append(score)
-        names.append(name)
+        if qid in filter:
+            qids.append(qid)
+            indices.append(idx)
+            scores.append(score)
+            names.append(name)
 
     return qids, indices, scores, names
 
 
 def disambiguate(text: str, mentions: List[Tuple[int, int]], top_k: int,
-                 embeddings, index, tokenizer, model,
-                 lemmatizer) -> List[List[Tuple[int, str, float, float]]]:
+                 embeddings, index, tokenizer, model, lemmatizer,
+                 filter) -> List[List[Tuple[int, str, float, float]]]:
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
     stride = 256
     inputs = tokenizer(text,
                        truncation=True,
@@ -103,7 +106,9 @@ def disambiguate(text: str, mentions: List[Tuple[int, int]], top_k: int,
         for spans in document_token_spans
     ]
 
-    span_indices = torch.tensor(padded_document_token_spans)
+    span_indices = torch.tensor(padded_document_token_spans).to(device)
+    for key in inputs:
+        inputs[key] = inputs[key].to(device)
 
     document_predicted_embeddings = model(**inputs,
                                           spans=span_indices)["embeddings"]
@@ -123,8 +128,8 @@ def disambiguate(text: str, mentions: List[Tuple[int, int]], top_k: int,
             offset = (stride - 2) * i
             key = (x + offset, y + offset)
 
-            candidate_qids, candidate_indices, fts_scores, preferred_names = get_candidates(
-                index, lemmatizer, mention)
+            candidates = get_candidates(index, lemmatizer, mention, filter)
+            candidate_qids, candidate_indices, fts_scores, preferred_names = candidates
 
             scores = np.dot(embeddings[candidate_indices],
                             predicted_embedding.detach().numpy())
@@ -153,21 +158,24 @@ def initialize_disambiguation():
     schema_builder.add_text_field("alias", stored=True)
     schema = schema_builder.build()
 
-    index = tantivy.Index(schema, path="../../data/processed/en")
+    index = tantivy.Index(schema,
+                          path="data/processed/en/wikidata-index-w-stop")
 
     lemmatizer = spacy.load("en_core_web_lg",
                             disable=["senter", "parser", "ner"])
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        "../../data/models/mapper-pretrained")
-    model = ELModel.from_pretrained("../../data/models/mapper-pretrained")
+    tokenizer = AutoTokenizer.from_pretrained("models/mapper-pretrained")
+    model = ELModel.from_pretrained("models/mapper-pretrained")
 
-    embeddings = np.memmap("../../data/processed/embeddings.npy",
+    embeddings = np.memmap("data/processed/embeddings.npy",
                            np.float32,
                            "r",
                            shape=(99385029, 128))
 
-    return index, lemmatizer, tokenizer, model, embeddings
+    with open('data/processed/en/qid-filter.pickle', 'rb') as handle:
+        filter = pickle.load(handle)
+
+    return index, lemmatizer, tokenizer, model, embeddings, filter
 
 
 if __name__ == "__main__":
@@ -187,11 +195,12 @@ if __name__ == "__main__":
     # mentions = [(244, 260), (339, 345), (422, 429)]
     # qids: List[int] = [28513, 34266, 43287]
 
-    index, lemmatizer, tokenizer, model, embeddings = initialize_disambiguation(
+    index, lemmatizer, tokenizer, model, embeddings, filter = initialize_disambiguation(
     )
 
     predictions: List[List[Tuple[int, str, float, float]]] = disambiguate(
-        text, mentions, 5, embeddings, index, tokenizer, model, lemmatizer)
+        text, mentions, 5, embeddings, index, tokenizer, model, lemmatizer,
+        filter)
 
     for (x, y), qid, prediction in zip(mentions, qids, predictions):
         print(text[x:y], qid)
