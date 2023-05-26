@@ -7,10 +7,12 @@ import torch.nn as nn
 from transformers.utils import ModelOutput
 import os
 
+
 class ELOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     embeddings: torch.FloatTensor
-   
+
+
 class ELModel(BertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -18,7 +20,8 @@ class ELModel(BertPreTrainedModel):
         super().__init__(config)
         self.bert = BertModel(config, add_pooling_layer=False)
 
-        self.mapper_1 = nn.Linear(config.hidden_size * 2, config.embedding_size)
+        self.mapper_1 = nn.Linear(config.hidden_size * 2,
+                                  config.embedding_size)
 
         self.mapper_2 = nn.Sequential(
             nn.GELU(),
@@ -60,8 +63,12 @@ class ELModel(BertPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        bos_indices = spans[:,:,0].unsqueeze(-1).expand(-1, -1, sequence_output.shape[-1])
-        eos_indices = spans[:,:,1].unsqueeze(-1).expand(-1, -1, sequence_output.shape[-1])
+        bos_indices = spans[:, :,
+                            0].unsqueeze(-1).expand(-1, -1,
+                                                    sequence_output.shape[-1])
+        eos_indices = spans[:, :,
+                            1].unsqueeze(-1).expand(-1, -1,
+                                                    sequence_output.shape[-1])
         bos = torch.gather(sequence_output, 1, bos_indices)
         eos = torch.gather(sequence_output, 1, eos_indices)
         # Combine boundary token embeddings into a single span embedding.
@@ -83,19 +90,26 @@ class ELModel(BertPreTrainedModel):
 
         if not return_dict:
             output = (embeddings, )
-            return ((loss,) + output) if loss is not None else output
+            return ((loss, ) + output) if loss is not None else output
 
         return ELOutput(
             loss=loss,
             embeddings=embeddings,
         )
 
+
 def instantiate_model(checkpoint, embedding_size):
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint, model_max_length=512, do_lower_case=False)
-    config = AutoConfig.from_pretrained(checkpoint, output_attentions=True, output_hidden_states=True)
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint,
+                                              model_max_length=512,
+                                              do_lower_case=False)
+    config = AutoConfig.from_pretrained(checkpoint,
+                                        output_attentions=True,
+                                        output_hidden_states=True)
     config = config.to_dict()
     config["embedding_size"] = embedding_size
     config = BertConfig.from_dict(config)
-    model = ELModel.from_pretrained(checkpoint, config=config, ignore_mismatched_sizes=True)
+    model = ELModel.from_pretrained(checkpoint,
+                                    config=config,
+                                    ignore_mismatched_sizes=True)
 
     return model, tokenizer
