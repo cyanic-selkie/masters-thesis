@@ -84,14 +84,14 @@ def disambiguate(text: str, mentions: List[Tuple[int, int]], top_k: int,
                     and offsets[token_end_index][1] >= span_end):
                 # Move the token_start_index and token_end_index to the two ends of the span.
                 # Note: we could go after the last offset if the span is the last word (edge case).
-                try:
-                    while offsets[token_start_index][0] < span_start:
-                        token_start_index += 1
+                # try:
+                while offsets[token_start_index][0] < span_start:
+                    token_start_index += 1
 
-                    while offsets[token_end_index][1] > span_end:
-                        token_end_index -= 1
-                except Exception:
-                    continue
+                while offsets[token_end_index][1] > span_end:
+                    token_end_index -= 1
+                # except Exception:
+                # continue
 
                 spans.append((token_start_index, token_end_index))
 
@@ -110,8 +110,8 @@ def disambiguate(text: str, mentions: List[Tuple[int, int]], top_k: int,
     for key in inputs:
         inputs[key] = inputs[key].to(device)
 
-    document_predicted_embeddings = model(**inputs,
-                                          spans=span_indices)["embeddings"]
+    document_predicted_embeddings = model(
+        **inputs, spans=span_indices)["embeddings"].cpu()
 
     predictions = defaultdict(lambda: [])
     order = []
@@ -166,6 +166,8 @@ def initialize_disambiguation():
 
     tokenizer = AutoTokenizer.from_pretrained("models/mapper-pretrained")
     model = ELModel.from_pretrained("models/mapper-pretrained")
+
+    model = model.to("cuda:0" if torch.cuda.is_available() else "cpu")
 
     embeddings = np.memmap("data/processed/embeddings.npy",
                            np.float32,

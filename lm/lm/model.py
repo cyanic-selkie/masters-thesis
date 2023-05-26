@@ -1,11 +1,9 @@
-from transformers import AutoModelForTokenClassification, AutoTokenizer, AutoConfig, BertPreTrainedModel, BertModel, BertConfig
-from typing import List, Optional
-import numpy as np
+from transformers import AutoTokenizer, AutoConfig, BertPreTrainedModel, BertModel, BertConfig
+from typing import Optional
 import torch
-from typing import Optional, Union, Tuple
+from typing import Union, Tuple
 import torch.nn as nn
 from transformers.utils import ModelOutput
-import os
 
 
 class ELOutput(ModelOutput):
