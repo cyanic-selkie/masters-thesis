@@ -101,6 +101,9 @@ def prepare_features(examples, tokenizer, max_length, doc_stride, embeddings,
             if qid is None or qid not in nodes:
                 continue
 
+            if "tag" in span and span["tag"] == 4:
+                continue
+
             # Start token index of the current span in the text.
             token_start_index = 0
 
