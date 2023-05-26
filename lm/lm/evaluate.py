@@ -33,7 +33,7 @@ if __name__ == "__main__":
         spans = []
         qids = []
         for entity in document["entities"]:
-            if entity["qid"]:
+            if entity["qid"] is not None and entity["tag"] != 4:
                 spans.append((entity["start"], entity["end"]))
                 qids.append(entity["qid"])
 
