@@ -7,7 +7,7 @@ from transformers import TrainingArguments, Trainer
 
 
 def train(checkpoint, tokenizer, name, embedding_size, dataset, epochs,
-          learning_rate, batch_size, gradient_accumulation_steps):
+          learning_rate, batch_size, gradient_accumulation_steps, model):
     data_collator = DataCollatorForEL(tokenizer, embedding_size)
 
     args = TrainingArguments(
@@ -28,6 +28,7 @@ def train(checkpoint, tokenizer, name, embedding_size, dataset, epochs,
 
     trainer = Trainer(
         # model_init=lambda: instantiate_model(checkpoint, embedding_size)[0],
+        model=model,
         args=args,
         train_dataset=dataset["train"],
         eval_dataset=dataset["validation"],
@@ -69,11 +70,11 @@ if __name__ == "__main__":
     parser.add_argument("--nodes", type=str, required=True)
     args = parser.parse_args()
 
-    _, tokenizer = instantiate_model(args.checkpoint, args.embedding_size)
+    model, tokenizer = instantiate_model(args.checkpoint, args.embedding_size)
 
     dataset = get_dataset_conll(tokenizer, args.embedding_size,
                                 args.embeddings, args.nodes)
 
     train(args.checkpoint, tokenizer, args.name, args.embedding_size, dataset,
           args.epochs, args.learning_rate, args.batch_size,
-          args.gradient_accumulation_steps)
+          args.gradient_accumulation_steps, model)
