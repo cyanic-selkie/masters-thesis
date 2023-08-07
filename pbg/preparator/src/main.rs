@@ -5,6 +5,7 @@ use itertools::Itertools;
 use ndarray::arr1;
 use rayon::prelude::*;
 use std::collections::BTreeMap;
+use std::collections::HashSet;
 use std::fs;
 use std::fs::File;
 use std::path::Path;
@@ -149,9 +150,17 @@ fn main() {
         edge_partitions.insert((i, j), (vec![], vec![], vec![]));
     }
 
+    let mut added = HashSet::new();
+
     for (lhs, rhs) in lhs.into_iter().zip(rhs) {
         let lhs = *nodes.get(&lhs).unwrap();
         let rhs = *nodes.get(&rhs).unwrap();
+
+        if added.contains(&(lhs, rhs)) || added.contains(&(rhs, lhs)) {
+            continue;
+        }
+
+        // lhs -> rhs
         let (edges_lhs, edges_rel, edges_rhs) = edge_partitions
             .get_mut(&(lhs / partition_size, rhs / partition_size))
             .unwrap();
@@ -159,6 +168,18 @@ fn main() {
         edges_lhs.push(calculate_offset(lhs, partition_size) as i64);
         edges_rel.push(0i64);
         edges_rhs.push(calculate_offset(rhs, partition_size) as i64);
+
+        // rhs -> lhs
+        let (rhs, lhs) = (lhs, rhs);
+        let (edges_lhs, edges_rel, edges_rhs) = edge_partitions
+            .get_mut(&(lhs / partition_size, rhs / partition_size))
+            .unwrap();
+        edges_lhs.push(calculate_offset(lhs, partition_size) as i64);
+        edges_rel.push(0i64);
+        edges_rhs.push(calculate_offset(rhs, partition_size) as i64);
+
+        // No need to add both directions, we can simply check both directions.
+        added.insert((rhs, lhs));
     }
 
     edge_partitions
