@@ -18,7 +18,7 @@ struct Args {
     input_nodes: String,
     /// Path to the Apache Parquet file containing a list of edges.
     #[arg(long)]
-    input_graph: String,
+    input_triples: String,
     /// Path to the output directory for entity counts.
     #[arg(long)]
     output_entities_dir: String,
